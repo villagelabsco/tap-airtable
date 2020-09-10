@@ -24,7 +24,7 @@ class Airtable(object):
         entries = []
 
         for base in bases:
-            entries.extend(cls.discover_base(base["id"]))
+            entries.extend(cls.discover_base(base["id"], base["name"]))
         return Catalog(entries).dump()
 
 
