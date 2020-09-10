@@ -2,7 +2,7 @@
 
 # Tap Airtable
 
-[Singer](https://www.singer.io/) tap that extracts data from a [MySQL](https://www.mysql.com/) database and produces JSON-formatted data following the [Singer spec](https://github.com/singer-io/getting-started/blob/master/docs/SPEC.md).
+[Singer](https://www.singer.io/) tap that extracts data from a [AirTable](https://airtable.com/api) database and produces JSON-formatted data following the [Singer spec](https://github.com/singer-io/getting-started/blob/master/docs/SPEC.md).
 
 To make this Tap work with a Target, clone both projects and follow this instructions:
 
@@ -24,14 +24,14 @@ pip install -e .
 ### Create the configuration file
 
 
-| Configuration Key   | Description                                                                                              |
-|---------------------|----------------------------------------------------------------------------------------------------------|
-| metadata_url        | Airtable metadata URL, at the time of the update: "https://api.airtable.com/v2/meta/"                    |
-| records_url         | Airtable content URL, at the time of the update: "https://api.airtable.com/v0/"                          |
-| token               | Airtable Token                                                                                           |
-| base_id             | Airtable base ID to export                                                                               |
-| selected_by_default | Default for every table in the base. If set to true, all of the tables in the schema will be syncronized |
-| remove_emojis       | Filter out emojis from the scyncronization                                                               |
+| Configuration Key   | required | Description                                                                                              |
+|---------------------|----------|----------------------------------------------------------------------------------------------------------|
+| metadata_url        | - | Airtable metadata URL, at the time of the update: "https://api.airtable.com/v2/meta/"                    |
+| records_url         | - | Airtable content URL, at the time of the update: "https://api.airtable.com/v0/"                          |
+| token               | yes | Airtable Token                                                                                           |
+| base_id             | - | Airtable base ID to export                                                                               |
+| selected_by_default | - | Default for every table in the base. If set to true, all of the tables in the schema will be syncronized |
+| remove_emojis       | - | Filter out emojis from the scyncronization                                                               |
 
 
 #### Configuration file example
