@@ -1,4 +1,5 @@
-from setuptools import setup
+from setuptools import setup, find_packages
+
 
 setup(name='tap-airtable',
       version='0.0.2',
@@ -29,6 +30,6 @@ setup(name='tap-airtable',
           [console_scripts]
           tap-airtable=tap_airtable:main
       ''',
-      packages=['tap_airtable'],
+      packages=find_packages(),
       include_package_data=True,
       )
