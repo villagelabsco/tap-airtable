@@ -20,6 +20,7 @@ setup(name='tap-airtable',
           'requests==2.20.1',
           'simplejson==3.11.1',
           'singer-python==5.4.0',
+          'python-slugify==4.0.1',
           'six==1.11.0',
           'tzlocal==1.5.1',
           'urllib3==1.24.2'
