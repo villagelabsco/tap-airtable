@@ -1,8 +1,10 @@
-from tap_airtable.airtable_utils import JsonUtils, Relations
 import requests
 import singer
+from slugify import slugify
+import json
+from singer import metadata
 import urllib.parse
-from singer.catalog import Catalog, CatalogEntry
+from singer.catalog import Catalog, CatalogEntry, Schema
 
 
 class Airtable(object):
@@ -11,6 +13,7 @@ class Airtable(object):
     token = None
     selected_by_default = False
     remove_emojis = False
+    logger = singer.get_logger()
 
     @classmethod
     def run_discovery(cls, args):
@@ -58,36 +61,92 @@ class Airtable(object):
 
     @classmethod
     def discover_base(cls, base_id, base_name=None):
+        cls.logger.info("discover base " + base_id)
         headers = cls.__get_auth_header()
         response = requests.get(url=cls.metadata_url + base_id, headers=headers)
         response.raise_for_status()
         entries = []
 
-        for table in response.json()["tables"]:
-            columns = {}
-            table_name = table["name"]
-            base = {"selected": cls.selected_by_default,
-                    "name": table_name,
-                    "properties": columns,
-                    "base_id": base_id}
+        schema_cols = {}
 
-            columns["id"] = {"type": ["null", "string"], 'key': True}
+        for table in response.json()["tables"]:
+            meta = {}
+
+            table_name = table["name"]
+            keys = []
+            meta = metadata.write(meta, 'database_name', 'base_id', base_id)
 
             for field in table["fields"]:
-                if not field["name"] == "Id":
-                    columns[field["name"]] = {"type": ["null", "string"]}
+                col_schema = cls.column_schema(field)
+                if col_schema.inclusion == "automatic":
+                    keys.append(field["name"])
+                schema_cols[field["name"]] = col_schema
+                meta = metadata.write(meta, ('properties', field["name"]), 'inclusion', 'available')
+                meta = metadata.write(meta, ('properties', field["name"]), 'airtable_type', field["config"]["type"] or None)
 
+            schema = Schema(type='object', properties=schema_cols)
 
             entry = CatalogEntry(
                 tap_stream_id=table["id"],
                 database=base_name or base_id,
                 table=table_name,
                 stream=table_name,
-                metadata=base)
+                metadata=metadata.to_list(meta),
+                key_properties=keys,
+                schema=schema
+            )
             entries.append(entry)
 
 
         return entries
+
+    @classmethod
+    def column_schema(cls, col_info):
+        date_types = ["date", "dateTime"]
+        number_types = ["number", "autoNumber"]
+        pk_types = ["autoNumber"]
+
+        air_type = "string"
+
+        if "config" in col_info and "type" in col_info["config"]:
+            air_type = col_info["config"]["type"]
+
+        inclusion = "available"
+        if air_type in pk_types:
+            inclusion = "automatic"
+
+        schema = Schema(inclusion=inclusion)
+
+        singer_type = 'string'
+        if air_type in number_types:
+            singer_type = 'number'
+
+        schema.type = ['null', singer_type]
+
+        if air_type in date_types:
+            schema.format = 'date-time'
+
+        return schema
+
+    @classmethod
+    def _find_base_id(cls, schema):
+        for m in schema["metadata"]:
+            if "breadcrumb" in m and m["breadcrumb"] == "database_name":
+                return m["metadata"]["base_id"]
+
+        raise Exception("catalog schema is missing base id")
+
+    @classmethod
+    def _find_selected_columns(cls, schema):
+        selected_cols = {}
+        for m in schema["metadata"]:
+            if "properties" not in m["breadcrumb"]:
+                continue
+
+            if "selected" in m["metadata"] and m["metadata"]["selected"]:
+                column_name = m["breadcrumb"][1]
+                selected_cols[column_name] = schema["schema"]["properties"][column_name]
+        return selected_cols
 
     @classmethod
     def run_sync(cls, config, properties):
@@ -96,55 +155,65 @@ class Airtable(object):
         streams = properties['streams']
 
         for stream in streams:
-            base_id = stream["metadata"]["base_id"]
-            table = stream['table_name'].replace('/', '')
-            table = table.replace(' ', '')
-            table = table.replace('{', '')
-            table = table.replace('}', '')
+            base_id = cls._find_base_id(stream)
+            table = stream['table_name']
 
-            table = urllib.parse.quote_plus(table)
+            table_slug = slugify(table, separator="_")
 
-            schema = stream['metadata']
+            col_defs = cls._find_selected_columns(stream)
 
-            if table != 'relations' and schema['selected']:
-                response = Airtable.get_response(base_id, schema["name"])
+            counter = 0
+            if len(col_defs) > 0:
+                cls.logger.info("will import " + table)
 
-                if response.json().get('records'):
-                    records = JsonUtils.match_record_with_keys(schema,
-                                                               response.json().get('records'),
-                                                               cls.remove_emojis)
+                response = Airtable.get_response(base_id, table, col_defs.keys(), counter=counter)
+                records = response.json().get('records')
 
-                    singer.write_schema(table, schema, 'id')
-                    singer.write_records(table, records)
-
+                if records:
+                    singer.write_schema(table_slug, {"properties": col_defs}, stream["key_properties"])
+                    singer.write_records(table_slug, cls._map_records(records))
                     offset = response.json().get("offset")
 
                     while offset:
-                        response = Airtable.get_response(base_id, schema["name"], offset)
-                        if response.json().get('records'):
-                            records = JsonUtils.match_record_with_keys(schema,
-                                                                       response.json().get('records'),
-                                                                       cls.remove_emojis)
+                        counter += 1
+                        response = Airtable.get_response(base_id, table, col_defs.keys(), offset, counter=counter)
+                        records = response.json().get('records')
+                        if records:
+                            singer.write_records(table_slug, cls._map_records(records))
+                            offset = response.json().get("offset")
 
-                        singer.write_records(table, records)
-                        offset = response.json().get("offset")
-
-        relations_table = {"name": "relations",
-                           "properties": {"id": {"type": ["null", "string"]},
-                                          "relation1": {"type": ["null", "string"]},
-                                          "relation2": {"type": ["null", "string"]}}}
-
-        singer.write_schema('relations', relations_table, 'id')
-        singer.write_records('relations', Relations.get_records())
 
     @classmethod
-    def get_response(cls, base_id, table, offset=None):
+    def _map_records(cls, records):
+        mapped = []
+        for r in records:
+            # TODO: cast to string/numbers?
+            mapped.append(r["fields"])
+        return mapped
+
+    @classmethod
+    def get_response(cls, base_id, table, fields, offset=None, counter = 0):
         table = urllib.parse.quote(table)
         uri = cls.records_url + base_id + '/' + table
 
+        uri += '?'
+
+        for field in fields:
+            uri += 'fields[]=' + field + '&'
+
         if offset:
-            uri += '?offset={}'.format(offset)
+            uri += 'offset={}'.format(offset)
 
         response = requests.get(uri, headers=cls.__get_auth_header())
+
+        cls.logger.info("METRIC " + json.dumps({
+            "type": "counter",
+            "metric": "page",
+            "value": counter,
+            "tags": {
+                "endpoint": uri,
+                "http_status_code": response.status_code
+            }
+        }))
         response.raise_for_status()
         return response
