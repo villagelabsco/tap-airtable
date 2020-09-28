@@ -155,6 +155,7 @@ class Airtable(object):
         streams = properties['streams']
 
         for stream in streams:
+            schema = stream["schema"]["properties"]
             base_id = cls._find_base_id(stream)
             table = stream['table_name']
 
@@ -171,7 +172,7 @@ class Airtable(object):
 
                 if records:
                     singer.write_schema(table_slug, {"properties": col_defs}, stream["key_properties"])
-                    singer.write_records(table_slug, cls._map_records(records))
+                    singer.write_records(table_slug, cls._map_records(schema, records))
                     offset = response.json().get("offset")
 
                     while offset:
@@ -179,16 +180,27 @@ class Airtable(object):
                         response = Airtable.get_response(base_id, table, col_defs.keys(), offset, counter=counter)
                         records = response.json().get('records')
                         if records:
-                            singer.write_records(table_slug, cls._map_records(records))
+                            singer.write_records(table_slug, cls._map_records(schema, records))
                             offset = response.json().get("offset")
 
 
     @classmethod
-    def _map_records(cls, records):
+    def _map_records(cls, schema, records):
         mapped = []
         for r in records:
+            row = {
+                "id": r.get("id")
+            }
+            for col in schema:
+                col_def = schema[col]
+                val = r["fields"].get(col)
+                col_type = type(val)
+                if col_type is not str and col_type is not float and col_type is not int:
+                    val = json.dumps(val)
+                row[col] = val
+
             # TODO: cast to string/numbers?
-            mapped.append(r["fields"])
+            mapped.append(row)
         return mapped
 
     @classmethod
