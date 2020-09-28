@@ -1,7 +1,9 @@
-from setuptools import setup
+#!/usr/bin/env python
+from setuptools import setup, find_packages
+
 
 setup(name='tap-airtable',
-      version='0.0.2',
+      version='0.0.3',
       description='Singer.io tap for extracting data from the Airtable API',
       author='AIME Mentorinng',
       url='https://singer.io',
@@ -29,6 +31,6 @@ setup(name='tap-airtable',
           [console_scripts]
           tap-airtable=tap_airtable:main
       ''',
-      packages=['tap_airtable'],
+      packages=find_packages(),
       include_package_data=True,
       )
