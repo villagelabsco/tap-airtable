@@ -67,7 +67,7 @@ class Airtable(object):
         response.raise_for_status()
         entries = []
 
-        schema_cols = {}
+        schema_cols = {"id":  Schema(inclusion="automatic", type=['null', "string"])}
 
         for table in response.json()["tables"]:
             meta = {}
@@ -139,6 +139,7 @@ class Airtable(object):
     @classmethod
     def _find_selected_columns(cls, schema):
         selected_cols = {}
+
         for m in schema["metadata"]:
             if "properties" not in m["breadcrumb"]:
                 continue
@@ -171,7 +172,9 @@ class Airtable(object):
                 records = response.json().get('records')
 
                 if records:
-                    singer.write_schema(table_slug, {"properties": col_defs}, stream["key_properties"])
+                    col_schema = col_defs
+                    col_schema["id"] = schema["id"]
+                    singer.write_schema(table_slug, {"properties": col_schema}, stream["key_properties"])
                     singer.write_records(table_slug, cls._map_records(schema, records))
                     offset = response.json().get("offset")
 
@@ -188,17 +191,16 @@ class Airtable(object):
     def _map_records(cls, schema, records):
         mapped = []
         for r in records:
-            row = {
-                "id": r.get("id")
-            }
+            row = {}
             for col in schema:
                 col_def = schema[col]
                 val = r["fields"].get(col)
                 col_type = type(val)
-                if col_type is not str and col_type is not float and col_type is not int:
+                if val is not None and col_type is not str and col_type is not float and col_type is not int:
                     val = json.dumps(val)
                 row[col] = val
 
+            row["id"] = r["id"]
             # TODO: cast to string/numbers?
             mapped.append(row)
         return mapped
