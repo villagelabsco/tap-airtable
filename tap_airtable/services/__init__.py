@@ -194,16 +194,26 @@ class Airtable(object):
             row = {}
             for col in schema:
                 col_def = schema[col]
+                requested_type = col_def["type"][1] or "string"
                 val = r["fields"].get(col)
-                col_type = type(val)
-                if val is not None and col_type is not str and col_type is not float and col_type is not int:
-                    val = json.dumps(val)
+                if val is not None:
+                    val = cls.cast_type(val, requested_type)
                 row[col] = val
 
             row["id"] = r["id"]
             # TODO: cast to string/numbers?
             mapped.append(row)
         return mapped
+
+    @classmethod
+    def cast_type(cls, val, requested_type):
+        col_type = type(val)
+
+        if requested_type == "string" and col_type is not str:
+            if col_type is float or col_type is int:
+                return str(val)
+            return json.dumps(val)
+        return val
 
     @classmethod
     def get_response(cls, base_id, table, fields, offset=None, counter = 0):
