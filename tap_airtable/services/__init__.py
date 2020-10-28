@@ -46,6 +46,7 @@ class Airtable(object):
     @classmethod
     def __get_base_ids(cls):
         response = requests.get(cls.metadata_url, headers=cls.__get_auth_header())
+        response.raise_for_status()
         bases = []
         for base in response.json()["bases"]:
             bases.append({
