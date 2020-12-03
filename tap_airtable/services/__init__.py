@@ -69,9 +69,9 @@ class Airtable(object):
         response.raise_for_status()
         entries = []
 
-        schema_cols = {"id":  Schema(inclusion="automatic", type=['null', "string"])}
-
         for table in response.json()["tables"]:
+            schema_cols = {"id": Schema(inclusion="automatic", type=['null', "string"])}
+
             meta = {}
 
             table_name = table["name"]
