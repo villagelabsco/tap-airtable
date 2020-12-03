@@ -223,9 +223,6 @@ class Airtable(object):
 
         uri += '?'
 
-        for field in fields:
-            uri += 'fields[]=' + field + '&'
-
         if offset:
             uri += 'offset={}'.format(offset)
 
