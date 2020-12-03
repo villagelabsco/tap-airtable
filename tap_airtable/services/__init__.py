@@ -4,6 +4,7 @@ from slugify import slugify
 import json
 from singer import metadata
 import urllib.parse
+from copy import deepcopy
 from singer.catalog import Catalog, CatalogEntry, Schema
 
 
@@ -68,9 +69,9 @@ class Airtable(object):
         response.raise_for_status()
         entries = []
 
-        schema_cols = {"id":  Schema(inclusion="automatic", type=['null', "string"])}
-
         for table in response.json()["tables"]:
+            schema_cols = {"id": Schema(inclusion="automatic", type=['null', "string"])}
+
             meta = {}
 
             table_name = table["name"]
@@ -173,7 +174,7 @@ class Airtable(object):
                 records = response.json().get('records')
 
                 if records:
-                    col_schema = col_defs
+                    col_schema = deepcopy(col_defs)
                     col_schema["id"] = schema["id"]
                     singer.write_schema(table_slug, {"properties": col_schema}, stream["key_properties"])
                     singer.write_records(table_slug, cls._map_records(schema, records))
@@ -223,6 +224,9 @@ class Airtable(object):
 
         uri += '?'
 
+        if fields:
+            for field in fields:
+                uri += "fields[]=" + field + "&"
         if offset:
             uri += 'offset={}'.format(offset)
 
