@@ -75,6 +75,7 @@ class Airtable(object):
 
             table_name = table["name"]
             keys = []
+            meta = metadata.write(meta, (), "inclusion", "available")
             meta = metadata.write(meta, 'database_name', 'base_id', base_id)
 
             for field in table["fields"]:
@@ -103,7 +104,7 @@ class Airtable(object):
 
     @classmethod
     def column_schema(cls, col_info):
-        date_types = ["date", "dateTime"]
+        date_types = ["dateTime"]
         number_types = ["number", "autoNumber"]
         pk_types = ["autoNumber"]
 
@@ -126,6 +127,8 @@ class Airtable(object):
 
         if air_type in date_types:
             schema.format = 'date-time'
+        if air_type in ["date"]:
+            schema.format = 'date'
 
         return schema
 
@@ -191,6 +194,7 @@ class Airtable(object):
     @classmethod
     def _map_records(cls, schema, records):
         mapped = []
+
         for r in records:
             row = {}
             for col in schema:
@@ -237,10 +241,6 @@ class Airtable(object):
             "type": "counter",
             "metric": "page",
             "value": counter,
-            "tags": {
-                "endpoint": uri,
-                "http_status_code": response.status_code
-            }
         }))
         response.raise_for_status()
         return response
