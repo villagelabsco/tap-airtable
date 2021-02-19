@@ -19,6 +19,7 @@ def main():
     except Exception as e:
         singer.logger.log_error(str(e))
         logging.exception(e)
+        exit(1)
 
 
 if __name__ == "__main__":
