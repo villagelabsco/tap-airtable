@@ -1,12 +1,11 @@
 import requests
 import singer
 from slugify import slugify
-import json
 from singer import metadata
 import urllib.parse
 from copy import deepcopy
 from singer.catalog import Catalog, CatalogEntry, Schema
-
+import json
 
 class Airtable(object):
     metadata_url = "https://api.airtable.com/v2/meta/"
@@ -223,12 +222,14 @@ class Airtable(object):
         uri = cls.records_url + base_id + '/' + table
 
         uri += '?'
+        params = {}
 
         if fields:
-            for field in fields:
-                uri += "fields[]=" + field + "&"
+            params["fields[]"] = list(fields)
         if offset:
-            uri += 'offset={}'.format(offset)
+            params["offset"] = offset
+
+        uri += urllib.parse.urlencode(params, True)
 
         response = requests.get(uri, headers=cls.__get_auth_header())
 
