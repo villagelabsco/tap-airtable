@@ -7,6 +7,7 @@ from copy import deepcopy
 from singer.catalog import Catalog, CatalogEntry, Schema
 import json
 
+
 class Airtable(object):
     metadata_url = "https://api.airtable.com/v2/meta/"
     records_url = "https://api.airtable.com/v0/"
@@ -28,6 +29,8 @@ class Airtable(object):
 
         for base in bases:
             entries.extend(cls.discover_base(base["id"], base["name"]))
+            if args.config.get("validate_only", False):
+                break
         return Catalog(entries).dump()
 
 
