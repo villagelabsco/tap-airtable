@@ -10,7 +10,6 @@ REQUIRED_CONFIG_KEYS = [
 
 def main():
     args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
-
     try:
         if args.discover:
             Airtable.run_discovery(args)
