@@ -1,11 +1,25 @@
-import requests
-import singer
-from slugify import slugify
-from singer import metadata
+import json
 import urllib.parse
 from copy import deepcopy
+
+import singer
+from requests import Session
+from requests.adapters import HTTPAdapter, Retry
+from singer import metadata
 from singer.catalog import Catalog, CatalogEntry, Schema
-import json
+from slugify import slugify
+
+
+def init_session() -> Session:
+    session = Session()
+
+    retries = Retry(
+        total=10, backoff_factor=2, status_forcelist=[500, 502, 503, 504, 429]
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+    session.mount("http://", HTTPAdapter(max_retries=retries))
+
+    return session
 
 
 class Airtable(object):
@@ -15,6 +29,7 @@ class Airtable(object):
     selected_by_default = False
     remove_emojis = False
     logger = singer.get_logger()
+    session = init_session()
 
     @classmethod
     def run_discovery(cls, args):
@@ -33,7 +48,6 @@ class Airtable(object):
                 break
         return Catalog(entries).dump()
 
-
     @classmethod
     def __apply_config(cls, config):
         if "metadata_url" in config:
@@ -48,7 +62,7 @@ class Airtable(object):
 
     @classmethod
     def __get_base_ids(cls):
-        response = requests.get(cls.metadata_url, headers=cls.__get_auth_header())
+        response = cls.session.get(cls.metadata_url, headers=cls.__get_auth_header())
         response.raise_for_status()
         bases = []
         for base in response.json()["bases"]:
@@ -58,7 +72,6 @@ class Airtable(object):
             })
         return bases
 
-
     @classmethod
     def __get_auth_header(cls):
         return {'Authorization': 'Bearer {}'.format(cls.token)}
@@ -67,7 +80,7 @@ class Airtable(object):
     def discover_base(cls, base_id, base_name=None):
         cls.logger.info("discover base " + base_id)
         headers = cls.__get_auth_header()
-        response = requests.get(url=cls.metadata_url + base_id, headers=headers)
+        response = cls.session.get(url=cls.metadata_url + base_id, headers=headers)
         response.raise_for_status()
         entries = []
 
@@ -87,7 +100,8 @@ class Airtable(object):
                     keys.append(field["name"])
                 schema_cols[field["name"]] = col_schema
                 meta = metadata.write(meta, ('properties', field["name"]), 'inclusion', 'available')
-                meta = metadata.write(meta, ('properties', field["name"]), 'airtable_type', field["config"]["type"] or None)
+                meta = metadata.write(meta, ('properties', field["name"]), 'airtable_type',
+                                      field["config"]["type"] or None)
 
             schema = Schema(type='object', properties=schema_cols)
 
@@ -101,7 +115,6 @@ class Airtable(object):
                 schema=schema
             )
             entries.append(entry)
-
 
         return entries
 
@@ -193,7 +206,6 @@ class Airtable(object):
                             singer.write_records(table_slug, cls._map_records(schema, records))
                             offset = response.json().get("offset")
 
-
     @classmethod
     def _map_records(cls, schema, records):
         mapped = []
@@ -224,7 +236,7 @@ class Airtable(object):
         return val
 
     @classmethod
-    def get_response(cls, base_id, table, fields, offset=None, counter = 0):
+    def get_response(cls, base_id, table, fields, offset=None, counter=0):
         table = urllib.parse.quote(table)
         uri = cls.records_url + base_id + '/' + table
 
@@ -238,7 +250,7 @@ class Airtable(object):
 
         uri += urllib.parse.urlencode(params, True)
 
-        response = requests.get(uri, headers=cls.__get_auth_header())
+        response = cls.session.get(uri, headers=cls.__get_auth_header())
 
         cls.logger.info("METRIC " + json.dumps({
             "type": "counter",
