@@ -237,7 +237,7 @@ class Airtable(object):
 
     @classmethod
     def get_response(cls, base_id, table, fields, offset=None, counter=0):
-        table = urllib.parse.quote(table)
+        table = urllib.parse.quote(table, safe='')
         uri = cls.records_url + base_id + '/' + table
 
         uri += '?'
