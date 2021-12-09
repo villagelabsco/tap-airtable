@@ -3,7 +3,7 @@ import urllib.parse
 from copy import deepcopy
 
 import singer
-from requests import Session
+from requests import Session, HTTPError
 from requests.adapters import HTTPAdapter, Retry
 from singer import metadata
 from singer.catalog import Catalog, CatalogEntry, Schema
@@ -95,16 +95,25 @@ class Airtable(object):
             meta = metadata.write(meta, 'database_name', 'base_id', base_id)
 
             for field in table["fields"]:
+                # numbers are not allowed at the start of column name in big query
+                # check if the name starts with digit, keep the same naming but add a character before
+                field_name = field["name"]
+                if field["name"][0].isdigit():
+                    field_name = "c_" + field_name
+
                 col_schema = cls.column_schema(field)
                 if col_schema.inclusion == "automatic":
-                    keys.append(field["name"])
-                schema_cols[field["name"]] = col_schema
-                meta = metadata.write(meta, ('properties', field["name"]), 'inclusion', 'available')
-                meta = metadata.write(meta, ('properties', field["name"]), 'airtable_type',
+                    keys.append(field_name)
+
+                schema_cols[field_name] = col_schema
+
+                meta = metadata.write(meta, (
+                    'properties', field_name, field['id'], field['name']), 'inclusion', 'available')
+                meta = metadata.write(meta, (
+                    'properties', field_name, field['id'], field['name']), 'airtable_type',
                                       field["config"]["type"] or None)
 
             schema = Schema(type='object', properties=schema_cols)
-
             entry = CatalogEntry(
                 tap_stream_id=table["id"],
                 database=base_name or base_id,
@@ -159,15 +168,23 @@ class Airtable(object):
     @classmethod
     def _find_selected_columns(cls, schema):
         selected_cols = {}
-
+        fields = []
         for m in schema["metadata"]:
             if "properties" not in m["breadcrumb"]:
                 continue
 
             if "selected" in m["metadata"] and m["metadata"]["selected"]:
                 column_name = m["breadcrumb"][1]
+                field = m["breadcrumb"][3]
                 selected_cols[column_name] = schema["schema"]["properties"][column_name]
-        return selected_cols
+                fields.append(field)
+        return selected_cols, fields
+
+    @classmethod
+    def _find_column(cls, col, meta_data):
+        for m in meta_data:
+            if "breadcrumb" in m and "properties" in m["breadcrumb"] and m["breadcrumb"][1] == col:
+                return m["breadcrumb"][3]
 
     @classmethod
     def run_sync(cls, config, properties):
@@ -181,41 +198,43 @@ class Airtable(object):
             table = stream['table_name']
 
             table_slug = slugify(table, separator="_")
-
-            col_defs = cls._find_selected_columns(stream)
+            col_defs, fields = cls._find_selected_columns(stream)
 
             counter = 0
             if len(col_defs) > 0:
                 cls.logger.info("will import " + table)
 
-                response = Airtable.get_response(base_id, table, col_defs.keys(), counter=counter)
+                response = Airtable.get_response(base_id, table, fields, counter=counter)
                 records = response.json().get('records')
 
                 if records:
                     col_schema = deepcopy(col_defs)
                     col_schema["id"] = schema["id"]
                     singer.write_schema(table_slug, {"properties": col_schema}, stream["key_properties"])
-                    singer.write_records(table_slug, cls._map_records(schema, records))
+                    singer.write_records(table_slug, cls._map_records(stream, records))
                     offset = response.json().get("offset")
 
                     while offset:
                         counter += 1
-                        response = Airtable.get_response(base_id, table, col_defs.keys(), offset, counter=counter)
+                        response = Airtable.get_response(base_id, table, fields, offset, counter=counter)
                         records = response.json().get('records')
                         if records:
-                            singer.write_records(table_slug, cls._map_records(schema, records))
+                            singer.write_records(table_slug, cls._map_records(stream, records))
                             offset = response.json().get("offset")
 
     @classmethod
-    def _map_records(cls, schema, records):
+    def _map_records(cls, stream, records):
         mapped = []
-
+        schema = stream["schema"]["properties"]
+        meta_data = stream["metadata"]
         for r in records:
             row = {}
             for col in schema:
                 col_def = schema[col]
                 requested_type = col_def["type"][1] or "string"
-                val = r["fields"].get(col)
+
+                col_name = cls._find_column(col, meta_data) or col
+                val = r["fields"].get(col_name)
                 if val is not None:
                     val = cls.cast_type(val, requested_type)
                 row[col] = val
@@ -257,5 +276,9 @@ class Airtable(object):
             "metric": "page",
             "value": counter,
         }))
+        if response.status_code != 200:
+            cls.logger.info("REASON " + json.dumps({
+                "value": response.text,
+            }))
         response.raise_for_status()
         return response
