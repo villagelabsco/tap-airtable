@@ -107,11 +107,9 @@ class Airtable(object):
 
                 schema_cols[field_name] = col_schema
 
-                meta = metadata.write(meta, (
-                    'properties', field_name, field['id'], field['name']), 'inclusion', 'available')
-                meta = metadata.write(meta, (
-                    'properties', field_name, field['id'], field['name']), 'airtable_type',
-                                      field["config"]["type"] or None)
+                meta = metadata.write(meta, ('properties', field_name), 'inclusion', 'available')
+                meta = metadata.write(meta, ('properties', field_name), 'real_name', field['name'])
+                meta = metadata.write(meta, ('properties', field_name), 'airtable_type', field["config"]["type"] or None)
 
             schema = Schema(type='object', properties=schema_cols)
             entry = CatalogEntry(
@@ -175,7 +173,7 @@ class Airtable(object):
 
             if "selected" in m["metadata"] and m["metadata"]["selected"]:
                 column_name = m["breadcrumb"][1]
-                field = m["breadcrumb"][3]
+                field = m["metadata"]["real_name"]
                 selected_cols[column_name] = schema["schema"]["properties"][column_name]
                 fields.append(field)
         return selected_cols, fields
@@ -184,7 +182,7 @@ class Airtable(object):
     def _find_column(cls, col, meta_data):
         for m in meta_data:
             if "breadcrumb" in m and "properties" in m["breadcrumb"] and m["breadcrumb"][1] == col:
-                return m["breadcrumb"][3]
+                return m["metadata"]["real_name"]
 
     @classmethod
     def run_sync(cls, config, properties):
