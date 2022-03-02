@@ -105,11 +105,19 @@ class Airtable(object):
                 if col_schema.inclusion == "automatic":
                     keys.append(field_name)
 
+                if field_name in schema_cols:
+                    field_ids = metadata.get(meta, ('properties', field_name), 'airtable_field_ids') or []
+                    field_ids.append(field["id"])
+
+                    meta = metadata.write(meta, ('properties', field_name), 'airtable_field_ids', field_ids)
+                    continue
+
                 schema_cols[field_name] = col_schema
 
                 meta = metadata.write(meta, ('properties', field_name), 'inclusion', 'available')
                 meta = metadata.write(meta, ('properties', field_name), 'real_name', field['name'])
                 meta = metadata.write(meta, ('properties', field_name), 'airtable_type', field["config"]["type"] or None)
+                meta = metadata.write(meta, ('properties', field_name), 'airtable_field_ids', [field["id"]])
 
             schema = Schema(type='object', properties=schema_cols)
             entry = CatalogEntry(
@@ -166,17 +174,17 @@ class Airtable(object):
     @classmethod
     def _find_selected_columns(cls, schema):
         selected_cols = {}
-        fields = []
+        field_ids = []
         for m in schema["metadata"]:
             if "properties" not in m["breadcrumb"]:
                 continue
 
             if "selected" in m["metadata"] and m["metadata"]["selected"]:
                 column_name = m["breadcrumb"][1]
-                field = m["metadata"]["real_name"]
+                ids = m["metadata"].get("airtable_field_ids", [])
                 selected_cols[column_name] = schema["schema"]["properties"][column_name]
-                fields.append(field)
-        return selected_cols, fields
+                field_ids.extend(ids)
+        return selected_cols, field_ids
 
     @classmethod
     def _find_column(cls, col, meta_data):
@@ -196,13 +204,13 @@ class Airtable(object):
             table = stream['table_name']
 
             table_slug = slugify(table, separator="_")
-            col_defs, fields = cls._find_selected_columns(stream)
+            col_defs, field_ids = cls._find_selected_columns(stream)
 
             counter = 0
             if len(col_defs) > 0:
                 cls.logger.info("will import " + table)
 
-                response = Airtable.get_response(base_id, table, fields, counter=counter)
+                response = Airtable.get_response(base_id, table, field_ids, counter=counter)
                 records = response.json().get('records')
 
                 if records:
@@ -214,7 +222,7 @@ class Airtable(object):
 
                     while offset:
                         counter += 1
-                        response = Airtable.get_response(base_id, table, fields, offset, counter=counter)
+                        response = Airtable.get_response(base_id, table, field_ids, offset, counter=counter)
                         records = response.json().get('records')
                         if records:
                             singer.write_records(table_slug, cls._map_records(stream, records))
