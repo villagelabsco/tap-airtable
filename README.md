@@ -1,25 +1,52 @@
-![AIME](https://d2ylaz7bdw65jx.cloudfront.net/assets/images/aime-logo.svg)
+# Airtable
 
-# Tap Airtable
+This tap pulls raw data from a [AirTable](https://airtable.com/api) database.
 
-[Singer](https://www.singer.io/) tap that extracts data from a [AirTable](https://airtable.com/api) database and produces JSON-formatted data following the [Singer spec](https://github.com/singer-io/getting-started/blob/master/docs/SPEC.md).
 
-To make this Tap work with a Target, clone both projects and follow this instructions:
+## Supported Features
+| Feature Name                                                                            | Supported | Comment                                 |
+| ------------                                                                            |-------|-----------------------------------------|
+| [Full Import](https://docs.y42.com/docs/features#full-import)                           | ✅      |                                         |
+| [Partial Import](https://docs.y42.com/docs/features#partial-import)                     | ❌    | No incremental import supported         |
+| [Start Date Selection](https://docs.y42.com/docs/features#start-date-selection)         | ❌    |                                         |
+| [Import Empty Tables](https://docs.y42.com/docs/features#import-empty-table)            | ❌    | Empty streams will not generate a table |
+| [Custom Data](https://docs.y42.com/docs/features#custom-data)                           | ✅     | Dynamic schemas                         |
+| [Retroactive Updating](https://docs.y42.com/docs/features#retroactive-updating)         | ❌     | No historical data                      |
+| [Dynamic Column Selection](https://docs.y42.com/docs/features#dynamic-column-selection) | ✅    | Select optional, non mandatory columns  |      
 
-## Usage
 
-This section dives into basic usage of `tap-mysql` by walking through extracting
-data from a table. It assumes that you can connect to and read from a MySQL
-database.
 
-### Install
+## Connector
+
+This is a [Singer](https://singer.io) tap that produces JSON-formatted data
+following the [Singer spec](https://github.com/singer-io/getting-started/blob/master/docs/SPEC.md).
+
+### Supported Streams
+
+  - Schema generation is dynamic, the streams could not be known before execution
+  - Synch is done as FULL TABLE only
+
+### Workflow
+
+There is no predefined schema for this integration. 
+The integration will dynamically load the tables & columns which are defined within your specific system.
+For this source you can use full imports. Every time the source syncs, it will fully get all your data.
+
+> Quotas 
+
+The API is limited to  5 requests per second, per base. 
+If you exceed this rate, you will receive a 429 status code and will need to wait 30 seconds before subsequent requests will succeed.
+This limit is the same across all pricing tiers and increased rate limits are not currently available. 
+
+---
+
+## Quick Start - Install
 
 ```bash
 python3 -m venv ~/.virtualenvs/tap-airtable
 source ~/.virtualenvs/tap-airtable/bin/activate
 pip install -e .
 ```
-
 
 ### Create the configuration file
 
@@ -103,3 +130,22 @@ From the home directory of the project
 ```shell
 tap-airtable -c config.json --properties properties.json | ~/.virtualenvs/target-postgres/bin/target-postgres 
 ```
+---
+
+# How To Setup
+## Resources
+
+
+### Overview
+ 
+**Authentication**: App Credentials     
+**Settings**: None     
+**Schema type**: Dynamic  
+**Update Type**: Full import     
+
+
+### Authorization and Access
+
+To authorize, an API Key/ Token should be generated first. 
+For reference check [here](https://support.airtable.com/docs/how-do-i-get-my-api-key#:~:text=On%20your%20account%20overview%20page,the%20Regenerate%20API%20key%20option).
+
