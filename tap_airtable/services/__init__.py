@@ -3,7 +3,7 @@ import urllib.parse
 from copy import deepcopy
 
 import singer
-from requests import Session, HTTPError
+from requests import Session
 from requests.adapters import HTTPAdapter, Retry
 from singer import metadata
 from singer.catalog import Catalog, CatalogEntry, Schema
@@ -20,6 +20,15 @@ def init_session() -> Session:
     session.mount("http://", HTTPAdapter(max_retries=retries))
 
     return session
+
+
+class CatalogEntry(CatalogEntry):
+
+    def to_dict(self):
+        result = super(CatalogEntry, self).to_dict()
+        if self.group:
+            result['group'] = self.group
+        return result
 
 
 class Airtable(object):
@@ -46,6 +55,7 @@ class Airtable(object):
             entries.extend(cls.discover_base(base["id"], base["name"]))
             if args.config.get("validate_only", False):
                 break
+
         return Catalog(entries).dump()
 
     @classmethod
@@ -129,9 +139,13 @@ class Airtable(object):
                 key_properties=keys,
                 schema=schema
             )
+
+            # Differ tables from base name
+            setattr(entry, 'group', base_name)
             entries.append(entry)
 
         return entries
+
 
     @classmethod
     def column_schema(cls, col_info):
@@ -288,3 +302,5 @@ class Airtable(object):
             }))
         response.raise_for_status()
         return response
+
+
