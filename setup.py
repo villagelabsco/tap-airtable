@@ -11,7 +11,7 @@ setup(name='tap-airtable',
       py_modules=['tap_airtable'],
       install_requires=[
           'backoff==1.3.2',
-          'certifi==2018.11.29',
+          'certifi==2023.7.22',
           'chardet==3.0.4',
           'idna==2.7',
           'jsonschema==2.6.0',
