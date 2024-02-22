@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 
 setup(name='tap-airtable',
-      version='0.0.3',
+      version='0.0.4',
       description='Singer.io tap for extracting data from the Airtable API',
       author='AIME Mentorinng',
       url='https://singer.io',
@@ -23,8 +23,7 @@ setup(name='tap-airtable',
           'simplejson==3.11.1',
           'singer-python==5.4.0',
           'python-slugify==4.0.1',
-          'six==1.12.0',
-          'tzlocal==1.5.1'
+          'six==1.12.0'
       ],
       entry_points='''
           [console_scripts]
