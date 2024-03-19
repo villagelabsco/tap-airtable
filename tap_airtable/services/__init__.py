@@ -1,6 +1,7 @@
 import json
 import urllib.parse
 from copy import deepcopy
+import base64
 
 import singer
 from requests import Session
@@ -8,6 +9,26 @@ from requests.adapters import HTTPAdapter, Retry
 from singer import metadata
 from singer.catalog import Catalog, CatalogEntry, Schema
 from slugify import slugify
+
+
+def write_secrets(config: dict) -> None:
+    import sys
+    import json
+
+    if 'token' not in config or 'refresh_token' not in config:
+        return
+
+    secrets = {
+        "type": "CREDENTIALS_CHANGED",
+        "secret": {
+            "access_token": config["token"],
+            "refresh_token": config["refresh_token"],
+            "token_type": "Bearer"
+        }
+    }
+    message = json.dumps(secrets)
+    sys.stdout.write(message + "\n")
+    sys.stdout.flush()
 
 
 def init_session() -> Session:
@@ -34,11 +55,49 @@ class CatalogEntry(CatalogEntry):
 class Airtable(object):
     metadata_url = "https://api.airtable.com/v0/meta/bases/"
     records_url = "https://api.airtable.com/v0/"
+    token_url = "https://airtable.com/oauth2/v1/token"
     token = None
     selected_by_default = False
     remove_emojis = False
     logger = singer.get_logger()
     session = init_session()
+
+    @classmethod
+    def refresh_token(cls, config):
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": "Basic " + base64.b64encode(f"{config['client_id']}:{config['client_secret']}".encode("utf-8")).decode("utf-8")
+        }
+
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": config["refresh_token"],
+            "scope": "data.records:read data.recordComments:read schema.bases:read user.email:read"
+        }
+
+        response = cls.session.post(cls.token_url, headers=headers, data=data)
+
+        if response.status_code == 200:
+            refreshed_creds = response.json()
+
+            config["token"] = refreshed_creds["access_token"]
+            cls.token = refreshed_creds["access_token"]
+            config["refresh_token"] = refreshed_creds["refresh_token"]
+            config["refreshed"] = True
+
+            cls.__apply_config(config)
+            write_secrets(config)
+
+            cls.logger.info("Token refreshed successfully")
+        else:
+            cls.logger.warning(f"Failed to refresh token: {response.status_code} -> {response.json()}")
+
+            response_dict = response.json()
+
+            if response_dict.get("error_description", "") == "Invalid token.":
+                raise Exception("Refresh token has expired. Please re-authenticate to make it work again.")
+
+        return config
 
     @classmethod
     def run_discovery(cls, args):
